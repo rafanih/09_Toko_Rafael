@@ -5,6 +5,32 @@ app.use(express.json());
 const PRODUCT_URL = process.env.PRODUCT_SERVICE_URL || 'http://localhost:3000';
 const orders = [];
 
+// ---- Lab 10: publisher event ke RabbitMQ ----
+const amqp = require('amqplib');
+const AMQP_URL = process.env.AMQP_URL || 'amqp://localhost';
+let channel = null;
+
+async function connectQueue() {
+  try {
+    const conn = await amqp.connect(AMQP_URL);
+    conn.on('error', () => {});
+    conn.on('close', () => { channel = null; setTimeout(connectQueue, 3000); });
+    channel = await conn.createChannel();
+    await channel.assertExchange('orders', 'fanout', { durable: true });
+    console.log('terhubung ke RabbitMQ');
+  } catch (e) {
+    console.error('RabbitMQ belum tersedia, coba lagi dalam 3 detik');
+    setTimeout(connectQueue, 3000);
+  }
+}
+
+function publishOrderCreated(order) {
+  if (!channel) { console.warn('channel tidak tersedia, event TIDAK terkirim:', order.id); return false; }
+  const body = Buffer.from(JSON.stringify({ type: 'order.created', data: order }));
+  return channel.publish('orders', '', body,
+    { persistent: true, contentType: 'application/json', messageId: `order-${order.id}` });
+}
+
 app.post('/orders', async (req, res) => {
   const { productId, qty } = req.body || {};
   if (!Number.isInteger(productId) || !Number.isInteger(qty) || qty < 1)
@@ -28,6 +54,7 @@ app.post('/orders', async (req, res) => {
   const order = { id: orders.length + 1, productId, productName: data.name,
                   qty, total: data.price * qty, createdAt: new Date().toISOString() };
   orders.push(order);
+  publishOrderCreated(order);   // asinkron: tidak menunggu consumer
   res.status(201).json(order);
 });
 
@@ -35,3 +62,4 @@ app.get('/orders', (req, res) => res.json(orders));
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log('order-service di :' + PORT));
+connectQueue();

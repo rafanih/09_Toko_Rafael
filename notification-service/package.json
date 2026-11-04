@@ -1,0 +1,13 @@
+{
+  "name": "notification-service",
+  "version": "1.0.0",
+  "description": "Consumer RabbitMQ untuk event order.created (Lab 10)",
+  "main": "notification-service.js",
+  "scripts": {
+    "start": "node notification-service.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "amqplib": "^2.2.1"
+  }
+}
